@@ -40,7 +40,7 @@
       # configs/<class>/<name> and pkg-overlays/<name>, each read through
       # the class index of the composed library.
       lib = caisson.lib.caisson.mkLib {
-        inherit (caisson.lib.caisson.pins.flake inputs) sources root;
+        inherit (caisson.lib.caisson.pins.flake inputs) dependencies root;
         name = "ch-microvm";
         systems = [ "x86_64-linux" ];
 
