@@ -2,12 +2,12 @@
 
 On-demand instances of [microvm.nix](https://github.com/microvm-nix/microvm.nix)
 guests, run by an ordinary user as units of that user's systemd
-manager. A home declares kinds of guests, each with the runner of a
-microvm.nix guest under cloud-hypervisor. An instance of a kind is
-leased to a holder process, runs in a directory of its own, and stops
-when its holder process exits.
+manager. A home-manager configuration declares kinds of guests, each
+with the runner of a microvm.nix guest under cloud-hypervisor. An
+instance of a kind is leased to a holder process, runs in a separate
+directory, and stops when its holder process exits.
 
-The flake publishes three things:
+The flake publishes:
 
 - **The package `ch-microvm`**, under `pkgs.ch-microvm` in a package set
   that applies the package overlay `ch-microvm/default`. It is the
@@ -33,7 +33,7 @@ The flake publishes three things:
 
   # A caisson flake lists it in `projects`; its package sets then apply
   # `ch-microvm/default`, and its registry holds `ch-microvm/microvm`.
-  # In a home that selects that module:
+  # In a home-manager configuration that selects that module:
   #   ch-microvm.kinds.echo = {
   #     runner = nixosConfigurations.echo-guest.config.microvm.declaredRunner;
   #     shares = [ "out" ];
@@ -53,15 +53,16 @@ ch-microvm status --json                # the same as data
 ch-microvm down echo-1                  # stop the instance and drop its lease
 ```
 
-The machine opens `/dev/kvm` to the user and enables unprivileged user
-namespaces. The design, the directory rules, the units and the
+The NixOS configuration of the host computer opens `/dev/kvm` to the
+user and enables unprivileged user namespaces. The design, the directory rules, the units and the
 findings about unprivileged virtiofsd are in
 [`docs/development/instances.md`](docs/development/instances.md).
 
 ## Development
 
 `nix flake check` builds the package, which runs its unittest suites,
-evaluates homes with the module, and checks the formatting. `nix fmt`
+evaluates home-manager configurations with the module, and checks the
+formatting. `nix fmt`
 formats. The nested VM test needs KVM and runs by name:
 `nix build -L '.#nestedVmTests.x86_64-linux.microvm-user-vm'`.
 [`docs/development/testing.md`](docs/development/testing.md) lists what
@@ -69,10 +70,11 @@ each check covers.
 
 In CI the same `nix flake check` runs with the Nix store cached between
 runs. A pull request that leaves `.github/` alone is checked by `main`'s
-copy of the workflow, in `main`'s context once its own check completes,
-and adds its build to the shared cache. A pull request that changes the
-pipeline is checked by its own copy, under a cache only it can see. The
-comments at the top of the two workflow files say why that split is
+copy of the workflow, in `main`'s context after the check of the pull
+request completes, and adds its build to the shared cache. A pull
+request that changes the pipeline is checked by the copy in the pull
+request, under a cache only that pull request can see. The comments at
+the top of the workflow files say why that split is
 what makes the cache safe to write from a pull request.
 
 ## Binary cache
@@ -85,10 +87,10 @@ The pipeline pulls from the `clhodapp` cachix cache and its upstreams:
 | `https://nix-community.cachix.org` | `nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=` |
 | `https://numtide.cachix.org` | `numtide.cachix.org-1:2ps1kLBUWjxIneOy1Ik6cQjb41X0iXVXeHigGmycPPE=` |
 
-The flake's `nixConfig` declares all three, so a direct `nix build` or
+The flake's `nixConfig` declares these substituters, so a direct `nix build` or
 `nix flake check` here uses them once accepted: answer Nix's prompt, or
 pass `--accept-flake-config`. A flake that consumes this one as an input
-adds them to its own `extra-substituters` and
+adds them to its `extra-substituters` and
 `extra-trusted-public-keys`, since Nix does not carry the settings of
 an input into the consumer.
 

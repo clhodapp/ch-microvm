@@ -220,9 +220,9 @@ jobs:
           }
 
           # 5. Keep the highest-priority roots that fit, drop the rest.
-          #    This run deletes nothing outside its own scope; if not
+          #    This run deletes nothing outside its scope; if not
           #    even the current main fits, it is saved anyway and
-          #    GitHub's own eviction is the backstop.
+          #    the eviction by GitHub is the backstop.
           kept=()
           for d in "${ordered[@]}"; do
             size=$(entry_size "${kept[@]}" "$d")

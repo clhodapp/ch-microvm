@@ -6,7 +6,7 @@
 # manager. It reads the kinds of guests from the file
 # `CH_MICROVM_CONFIG` names. The home-manager module `microvm` writes
 # that file from its options and wraps this package with it as the
-# command of the home.
+# command of the home-manager configuration.
 #
 # The package is a Python package as well as a command. A Python
 # program built on the library lists it in its `dependencies`, and the

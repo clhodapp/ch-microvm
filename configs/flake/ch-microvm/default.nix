@@ -90,9 +90,9 @@
         perSystem =
           { pkgs, system, ... }:
           let
-            # Homes of `tester` that select the module with the given
-            # kinds.
-            home =
+            # The `config` of a home-manager configuration of `tester`
+            # that selects the module with the given kinds.
+            testerConfig =
               kinds:
               (inputs.home-manager.lib.homeManagerConfiguration {
                 inherit pkgs;
@@ -133,12 +133,12 @@
               };
               quiet.runner = runner;
             };
-            fullHome = home kinds;
-            bareHome = home { };
-            # Whether a home fails an assertion of the module.
-            # home-manager refuses to evaluate a home whose assertions
-            # fail.
-            refused = extra: !(builtins.tryEval (home (kinds // extra)).home.packages).success;
+            fullConfig = testerConfig kinds;
+            bareConfig = testerConfig { };
+            # Whether a home-manager configuration fails an assertion of
+            # the module. home-manager refuses to evaluate a
+            # configuration whose assertions fail.
+            refused = extra: !(builtins.tryEval (testerConfig (kinds // extra)).home.packages).success;
 
             state = "/home/tester/.local/state/ch-microvm";
           in
@@ -149,18 +149,19 @@
               # `systemd-run --user`, a fake /proc and fake VMMs.
               ch-microvm = self.packages.${system}.ch-microvm;
 
-              # The module with kinds from its options. The home with
-              # kinds gets the command with the kinds baked in and the
+              # The module with kinds from its options. The home-manager
+              # configuration with kinds gets the command with the kinds
+              # baked in and the
               # reap timer. The baked configuration carries the runner,
               # the shares, the limits and the state root of each kind,
               # and the systemctl, systemd-run and PATH of the units. The
               # record `instances` names the instances of each kind with
-              # their directories and share directories. The home without
-              # kinds gets none of it. A kind name outside the pattern
-              # fails an assertion.
-              home-module =
+              # their directories and share directories. The home-manager
+              # configuration without kinds gets none of it. A kind name
+              # outside the pattern fails an assertion.
+              home-manager-module =
                 assert
-                  fullHome.ch-microvm.instances == {
+                  fullConfig.ch-microvm.instances == {
                     probe = [
                       {
                         name = "probe-1";
@@ -187,19 +188,19 @@
                       }
                     ];
                   };
-                assert bareHome.ch-microvm.instances == { };
-                assert !(bareHome.systemd.user.timers ? ch-microvm-reap);
-                assert !(builtins.elem bareHome.ch-microvm.package bareHome.home.packages);
+                assert bareConfig.ch-microvm.instances == { };
+                assert !(bareConfig.systemd.user.timers ? ch-microvm-reap);
+                assert !(builtins.elem bareConfig.ch-microvm.package bareConfig.home.packages);
                 # The control: a kind of another name evaluates.
                 assert !refused { extra.runner = runner; };
                 assert refused { "bad/name".runner = runner; };
-                pkgs.runCommand "home-module"
+                pkgs.runCommand "home-manager-module"
                   {
                     nativeBuildInputs = [ pkgs.jq ];
-                    files = fullHome.home-files;
-                    command = lib.getExe fullHome.ch-microvm.package;
-                    config = fullHome.ch-microvm.configFile;
-                    installed = builtins.elem fullHome.ch-microvm.package fullHome.home.packages;
+                    files = fullConfig.home-files;
+                    command = lib.getExe fullConfig.ch-microvm.package;
+                    config = fullConfig.ch-microvm.configFile;
+                    installed = builtins.elem fullConfig.ch-microvm.package fullConfig.home.packages;
                     inherit runner state;
                   }
                   ''

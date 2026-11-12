@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 #
-# On-demand instances of microvm.nix guests that the user of this home
-# runs. The option `kinds` declares them, each with the runner of a
+# On-demand instances of microvm.nix guests that the user of this
+# home-manager configuration runs. The option `kinds` declares them, each with the runner of a
 # microvm.nix guest under cloud-hypervisor. An instance of a kind runs as
 # two transient units of the user's systemd manager, in a directory of
 # the instance. The module knows the runner of a guest and nothing of
@@ -46,7 +46,7 @@ let
           that option. The guest serves `vsockPort` on its vsock when
           `vsockPort` is set, and the guest then sets
           `microvm.vsock.cid`. Instances of a kind may share one CID,
-          since each instance has a vsock of its own.
+          since each instance has a separate vsock.
         '';
       };
       shares = lib.mkOption {
@@ -230,14 +230,14 @@ in
         }
       '';
       description = ''
-        The guest kinds this home runs, by name. The user of this home
-        starts an instance of a kind with `ch-microvm up`, and a program
+        The guest kinds this home-manager configuration runs, by name.
+        The user of this home-manager configuration starts an instance of a kind with `ch-microvm up`, and a program
         built on the library `ch_microvm` starts one through that
         library. An instance runs as the transient units
         `microvm-<kind>-<n>-virtiofsd.service` and
         `microvm-<kind>-<n>.service` of the user's systemd manager. The
-        machine needs `/dev/kvm` open to the user, and unprivileged user
-        namespaces for virtiofsd.
+        NixOS configuration of the host computer opens `/dev/kvm` to the
+        user and enables unprivileged user namespaces for virtiofsd.
       '';
     };
 
@@ -247,13 +247,13 @@ in
         pkgs.ch-microvm.ch-microvm or (throw ''
           ch-microvm.programPackage defaults to pkgs.ch-microvm.ch-microvm:
           apply the package overlay of ch-microvm to the package set this
-          home evaluates with. A caisson consumer lists the flake in
+          home-manager configuration evaluates with. A caisson consumer lists the flake in
           `projects`, and its package sets apply `ch-microvm/default`.
         '');
       defaultText = lib.literalExpression "pkgs.ch-microvm.ch-microvm";
       description = ''
         The command `ch-microvm` before the module bakes the kinds of
-        this home into it.
+        this home-manager configuration into it.
       '';
     };
 
@@ -272,10 +272,11 @@ in
       type = lib.types.package;
       readOnly = true;
       default = command;
-      defaultText = lib.literalMD "the command `ch-microvm` with the kinds of this home baked in";
+      defaultText = lib.literalMD "the command `ch-microvm` with the kinds of this home-manager configuration baked in";
       description = ''
-        The command `ch-microvm` of this home, with the kinds of this
-        home baked in. The home installs it when it has kinds.
+        The command `ch-microvm` of this home-manager configuration,
+        with its kinds baked in. The home-manager configuration installs
+        it when it has kinds.
       '';
     };
 
@@ -283,9 +284,10 @@ in
       type = lib.types.package;
       readOnly = true;
       default = configFile;
-      defaultText = lib.literalMD "the configuration file the command of this home reads";
+      defaultText = lib.literalMD "the configuration file the command of this home-manager configuration reads";
       description = ''
-        The configuration file the command of this home reads: the
+        The configuration file the command of this home-manager
+        configuration reads: the
         kinds, the state directory, the systemctl and systemd-run the
         units start with, and the `PATH` of the units. A program built
         on the library `ch_microvm` reads it with
@@ -319,7 +321,8 @@ in
     home.packages = [ command ];
 
     # The command writes leases here, and the reap service sees the rest
-    # of home read-only, so the directory exists before it runs.
+    # of the home directory read-only, so the directory exists before
+    # it runs.
     systemd.user.tmpfiles.rules = [ "d ${stateDir}/leases 0700 - - -" ];
 
     systemd.user.timers.ch-microvm-reap = {

@@ -6,7 +6,7 @@ Run the commands from the root of the repository.
 nix flake show
 nix flake check
 nix build '.#packages.x86_64-linux.ch-microvm'
-nix build '.#checks.x86_64-linux.home-module'
+nix build '.#checks.x86_64-linux.home-manager-module'
 nix build -L '.#nestedVmTests.x86_64-linux.microvm-user-vm'
 nix fmt
 ```

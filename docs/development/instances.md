@@ -1,17 +1,17 @@
 # Instances of microvm.nix guests
 
-The home-manager module `microvm` lets the user of a home run
-microvm.nix guests on demand. A holder process leases an instance of a
+The home-manager module `microvm` lets the user of a home-manager
+configuration run microvm.nix guests on demand. A holder process leases an instance of a
 guest, starts it, uses it, and stops it. The instance runs as units of
 the user's systemd manager, in a directory the caller chooses or in a
 default directory. The module knows the runner of a guest and nothing
 of what runs in it.
 
-## What the machine provides
+## What the NixOS configuration of the host provides
 
 - `/dev/kvm` is open to the user. cloud-hypervisor opens it as the user.
 - Unprivileged user namespaces are enabled. virtiofsd runs as the user
-  and puts itself in a user namespace of its own.
+  and puts itself in a separate user namespace.
 - The user's systemd manager runs while an instance runs. A lingering
   user has it from boot.
 
@@ -46,10 +46,10 @@ in the working directory of the runner: the API socket, the sockets of
 the virtiofs shares, the hybrid vsock socket `notify.vsock`, relative
 volume images, and a relative `source` of a share. `up` starts the
 runner with the directory of the instance as its working directory, so
-each instance has its own sockets and its own shares.
+each instance has separate sockets and separate shares.
 
 The guest declares `microvm.vsock.cid` when it serves `vsockPort`.
-cloud-hypervisor gives each VMM process a vsock of its own, reached
+cloud-hypervisor gives each VMM process a separate vsock, reached
 through `notify.vsock`, so every instance of a kind uses the same CID.
 With a CID, the runner relays the readiness notification of the guest
 to the unit. A guest that sets `microvm.socket`, such as
@@ -58,12 +58,12 @@ unit of the VMM runs to stop the guest through its power button.
 
 ## virtiofsd without privileges
 
-microvm.nix starts virtiofsd as root in its own NixOS service. Run by
+microvm.nix starts virtiofsd as root in a NixOS service. Run by
 the user, it meets two settings of microvm.nix that assume root:
 
 - `virtiofsd-run` runs supervisord, whose configuration sets
   `user = root`. supervisord exits when it cannot become that user.
-  Its option `--user`, given the user's own ID, wins over the
+  Its option `--user`, given the ID of the user, wins over the
   configuration and asks for no change. `up` starts `virtiofsd-run`
   with `--user=<uid>`.
 - virtiofsd gives the socket of a share the group of
@@ -185,7 +185,8 @@ standard library. The package `pkgs.ch-microvm.ch-microvm` is the
 program alone. The module writes a configuration file with the kinds,
 the state directory, the systemctl and systemd-run of `pkgs.systemd`,
 the `PATH` of the units and `upTimeout`, and wraps the program with it
-as the command of the home. `CH_MICROVM_CONFIG` names the file.
+as the command of the home-manager configuration. `CH_MICROVM_CONFIG`
+names the file.
 
 The verbs:
 
@@ -221,7 +222,7 @@ other argument before it reads any state.
 A program that leases instances itself builds on the library
 `ch_microvm`, which the package `ch-microvm` carries. It lists the
 package in its `dependencies`. It reads the configuration file of the
-home, `ch-microvm.configFile`, with `ch_microvm.instances.load`, so its
+home-manager configuration, `ch-microvm.configFile`, with `ch_microvm.instances.load`, so its
 leases and units are the ones `ch-microvm status` shows and
 `ch-microvm reap` stops.
 
@@ -274,8 +275,8 @@ nothing.
 
 ## Stopping
 
-Three mechanisms stop a guest, each covering what the one before
-misses:
+These mechanisms stop a guest, each covering what the mechanism before
+it misses:
 
 1. The holder stops its instances with `down`, or the user stops one
    with `ch-microvm down`.
@@ -311,25 +312,27 @@ The reap service runs with this `serviceConfig`:
   waits for the vsock port. The default is 120.
 - `ch-microvm.programPackage`: the command before the module wraps it.
   The default is `pkgs.ch-microvm.ch-microvm`.
-- `ch-microvm.package` (read-only): the command of the home with the
-  kinds baked in. The home installs it when it has kinds.
+- `ch-microvm.package` (read-only): the command of the home-manager
+  configuration with the kinds baked in. The home-manager configuration
+  installs it when it has kinds.
 - `ch-microvm.configFile` (read-only): the configuration file the
   command reads.
 - `ch-microvm.instances` (read-only): the instances of each kind, each
   with its name, its default directory and its share directories.
 
-## What a tree sets
+## What a flake sets
 
-A machine whose user runs guests:
+A flake that lets the user of a NixOS configuration run guests opens
+`/dev/kvm` to the user and enables unprivileged user namespaces in that
+NixOS configuration.
 
-- opens `/dev/kvm` to the user and enables unprivileged user
-  namespaces;
-- declares a NixOS configuration for each guest with the microvm.nix
-  guest module, `microvm.hypervisor = "cloud-hypervisor"`,
-  `microvm.virtiofsd.group = null`, virtiofs shares with relative
-  sources, `microvm.vsock.cid` when the guest serves a vsock port, and
-  `microvm.socket` for a clean shutdown;
-- declares a home for the user that selects `ch-microvm/microvm` and
-  sets `ch-microvm.kinds.<kind>` with the
-  `config.microvm.declaredRunner` of the guest, its shares and its
-  port.
+The flake declares a NixOS configuration for each guest with the
+microvm.nix guest module, `microvm.hypervisor = "cloud-hypervisor"`,
+`microvm.virtiofsd.group = null`, virtiofs shares with relative
+sources, `microvm.vsock.cid` when the guest serves a vsock port, and
+`microvm.socket` for a clean shutdown.
+
+The flake declares a home-manager configuration for the user that
+selects `ch-microvm/microvm` and sets `ch-microvm.kinds.<kind>` with
+the `config.microvm.declaredRunner` of the guest, its shares and its
+port.

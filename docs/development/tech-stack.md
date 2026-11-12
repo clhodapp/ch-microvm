@@ -7,7 +7,8 @@
   `default` puts the packages under `pkgs.ch-microvm`.
 - **flake-parts** for the flake outputs, with the `checks` and
   `formatter` partitions that take the inputs of `tests/dependencies`.
-- **home-manager** for the module. The checks evaluate homes with it.
+- **home-manager** for the module. The checks evaluate home-manager
+  configurations with it.
 - **Python 3**, standard library only, for the command and the library.
   The package is built with `buildPythonPackage`, so it is both a
   command and a dependency of another Python package.

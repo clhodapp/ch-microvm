@@ -7,8 +7,8 @@
 #
 # `pkgs` is the package set of the checks. `microvm` is the microvm.nix
 # flake. `mkCommand` takes the runner of the guest and returns the
-# command `ch-microvm` of a home of `alice` with the kind `echo`, whose
-# runner it is.
+# command `ch-microvm` of a home-manager configuration of `alice` with
+# the kind `echo`, whose runner it is.
 #
 # The guest `echo` runs `socat VSOCK-LISTEN:5000,fork EXEC:cat`, so it
 # answers on its vsock port 5000 with what it reads there. Its one

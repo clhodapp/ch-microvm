@@ -36,7 +36,7 @@
 # a tree of roots the entry carries: main/<sha> for main's builds,
 # pr/<number>/<sha> for requests', each listing the store paths of that
 # build's closure that the upstream cache did not serve. Each run adds
-# its own, drops the lowest-priority roots until the union fits the
+# a root for its build, drops the lowest-priority roots until the union fits the
 # repository's 10 GB of cache, and then every path no surviving root
 # lists goes. The priority order, highest first: the current main; each
 # open request's newest build; older mains; closed requests. Requests
@@ -56,7 +56,7 @@ on:
   workflow_dispatch:
     inputs:
       head:
-        description: Commit to check (a pull request's head); main's own when empty
+        description: Commit to check (a pull request's head); the head of main when empty
         required: false
         type: string
       pr:
@@ -219,7 +219,7 @@ jobs:
 
           # 1. Root what this run built: the checks and the packages.
           #    Checks alone would not do; a check's output need not
-          #    reference what it built (the output of `home-module` is a
+          #    reference what it built (the output of `home-manager-module` is a
           #    marker file), and the pruning keeps only what the roots
           #    reach. Everything is already built, so this evaluates and
           #    lists. An output the flake does not provide is skipped;

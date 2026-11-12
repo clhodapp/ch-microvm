@@ -5,7 +5,7 @@ A kind is a guest that the user runs as many times at once as the kind
 allows. Every kind has a runner: the runner package of a microvm.nix
 guest under cloud-hypervisor. A running copy of the guest is an
 instance, named `<kind>-<n>` with `n` from 1 to `maxInstances`. Each
-instance runs in a directory of its own. Cloud-hypervisor creates its
+instance runs in a separate directory. Cloud-hypervisor creates its
 sockets in that directory, and the virtiofs shares of the runner name
 directories in it. The home-manager module writes the kinds into the
 configuration file that `load` reads.
@@ -373,7 +373,7 @@ class Instances:
             unit = self.virtiofsd_unit(name)
             # supervisord, which virtiofsd-run runs, sets `user = root`
             # in its configuration and exits when it cannot become that
-            # user. Its option --user, given the user's own ID, wins
+            # user. Its option --user, given the ID of the user, wins
             # over the configuration and asks for no change.
             self.start_unit(
                 unit,

@@ -3,9 +3,10 @@
 ## Vision
 
 `ch-microvm` runs microvm.nix guests on demand for an ordinary user.
-A home declares kinds of guests. An instance of a kind is leased to a
-holder process, runs as units of the user's systemd manager in a
-directory of its own, and stops when its holder process exits.
+A home-manager configuration declares kinds of guests. An instance of a
+kind is leased to a holder process, runs as units of the user's systemd
+manager in a separate directory, and stops when its holder process
+exits.
 
 ## Goals
 
@@ -24,8 +25,8 @@ directory of its own, and stops when its holder process exits.
 ## Scope
 
 - The module knows the runner of a guest and nothing of what runs in it.
-  A tree that runs a service in a guest declares the guest
-  configuration itself.
+  A flake that runs a service in a guest declares the NixOS
+  configuration of the guest itself.
 - The guests run under cloud-hypervisor. The library reaches a guest
   through the hybrid vsock socket of its VMM.
 - The leases scope instances to holder processes of one user. They keep

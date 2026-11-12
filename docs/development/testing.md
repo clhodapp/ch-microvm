@@ -26,13 +26,15 @@
     not `OK `, a missing socket, a socket nothing listens on, a socket
     the user may not open, a socket path too long for `connect(2)`, and
     a VMM that never answers.
-- `checks.<system>.home-module` evaluates homes with the module and a
-  fake runner. The home with kinds gets the command, the reap timer and
+- `checks.<system>.home-manager-module` evaluates home-manager
+  configurations with the module and a fake runner. The home-manager
+  configuration with kinds gets the command, the reap timer and
   its hardened service. The configuration file carries each kind as its
   options give it, and the command reads that file. The record
   `ch-microvm.instances` names each instance with its default directory
   and share directories. `ch-microvm status` and `status --json` list
-  every instance. A home without kinds gets none of it, and a kind name
+  every instance. A home-manager configuration without kinds gets none
+  of it, and a kind name
   outside the pattern fails an assertion.
 - `checks.<system>.treefmt` checks the formatting.
 
