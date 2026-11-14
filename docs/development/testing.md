@@ -2,7 +2,7 @@
 
 `nix flake check` builds these checks:
 
-- `checks.<system>.ch-microvm` is the package. Its build runs the
+- `checks.<system>.ch-microvm-package` is the package. Its build runs the
   unittest suites, against the fakes of `ch_microvm.testing`: a fake
   `systemctl --user`, a fake `systemd-run --user`, a fake `/proc` and
   fake VMMs on hybrid vsock sockets.
