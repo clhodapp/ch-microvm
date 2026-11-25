@@ -44,6 +44,17 @@
 # which this run only ever deletes, closed ones first, when space is
 # short. Older entries in this scope are removed by the `prune` job,
 # after the new entry is confirmed to exist, never before.
+#
+# A second entry holds the Nix fetcher cache, from ~/.cache/nix. Nix
+# unpacks each `github:` input into a git repository there and records
+# which tree each locked input is, so with the entry restored, an input
+# the lock files already pinned is neither downloaded nor unpacked
+# again. Its key is the month and the hash of the lock files. A run
+# whose key exists restores that entry and saves nothing; any other run
+# restores the newest entry of the month and saves under its key. Nix
+# keeps every input it has unpacked, so the month in the key starts the
+# entry over each month, and an entry holds at most a month of inputs.
+# The `prune` job removes older fetcher entries in this scope too.
 
 name: check
 
@@ -120,8 +131,16 @@ jobs:
       CI_CACHE: /home/runner/ci-cache
       # Caches whose paths are left out of the entry, space-separated.
       UPSTREAM_CACHES: https://cache.nixos.org
+      # The Nix fetcher cache, carried in a second Actions cache entry:
+      # the git repositories that inputs are unpacked or cloned into,
+      # and the table that maps each locked input to its tree there.
+      FETCHER_CACHE: |
+        ~/.cache/nix/tarball-cache-v*
+        ~/.cache/nix/gitv*
+        ~/.cache/nix/fetcher-cache-v*.sqlite*
     outputs:
       head: ${{ steps.target.outputs.head }}
+      fetcher: ${{ steps.fetcher.outputs.key }}
     steps:
       - name: Resolve what to build
         id: target
@@ -165,6 +184,24 @@ jobs:
           key: cache-${{ runner.os }}-${{ steps.target.outputs.head }}
           restore-keys: cache-${{ runner.os }}-
 
+      # The fetcher cache entry is named by the month and the hash of
+      # every lock file in the tree; the header says why.
+      - name: Name the fetcher cache entry
+        id: fetcher
+        env:
+          LOCKS: ${{ hashFiles('**/flake.lock') }}
+        run: |
+          month=$(date -u +%Y-%m)
+          echo "prefix=fetcher-$RUNNER_OS-$month-" >> "$GITHUB_OUTPUT"
+          echo "key=fetcher-$RUNNER_OS-$month-$LOCKS" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: fetcher-restore
+        with:
+          path: ${{ env.FETCHER_CACHE }}
+          key: ${{ steps.fetcher.outputs.key }}
+          restore-keys: ${{ steps.fetcher.outputs.prefix }}
+
       # A binary cache needs its directories and its info file before
       # anything opens it; created here, owned by this user, so that
       # neither the daemon (which opens it as a substituter, as root)
@@ -199,6 +236,14 @@ jobs:
       - name: Run the flake checks
         run: nix flake check --print-build-logs
 
+      # Saved before the root step, so that its budget counts this
+      # entry. A run that restored this very key has nothing to add.
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: steps.fetcher-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.FETCHER_CACHE }}
+          key: ${{ steps.fetcher.outputs.key }}
+
       - name: Root this build and apply the cache priorities
         env:
           GH_TOKEN: ${{ github.token }}
@@ -206,7 +251,6 @@ jobs:
           ROOT_ID: ${{ steps.target.outputs.id }}
           CURRENT_MAIN: ${{ steps.target.outputs.base }}
           OWN_REF: ${{ github.ref }}
-          KEY_PREFIX: cache-${{ runner.os }}-
           MAY_DELETE: "true"
         run: |
           set -euo pipefail
@@ -285,14 +329,15 @@ jobs:
 
           # 4. The budget: the repository's 10 GB, less the entries of
           #    requests that changed the pipeline (they live in their own
-          #    scopes), less this scope's current entry, which coexists
-          #    with the new one until the `prune` job removes it. Sizes
-          #    are the compressed sizes the narinfo files record, which
-          #    is what the entry is made of.
+          #    scopes), less every entry in this scope: the current build
+          #    cache entry, which coexists with the new one until the
+          #    `prune` job removes it, and the fetcher cache entries.
+          #    Sizes are the compressed sizes the narinfo files record,
+          #    which is what the entry is made of.
           gib=$((1024 * 1024 * 1024))
           caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --limit 1000 --json key,ref,sizeInBytes,lastAccessedAt)
-          used_by_own_scope=$(jq --arg ref "$OWN_REF" --arg p "$KEY_PREFIX" \
-            '[.[] | select(.ref == $ref and (.key | startswith($p))) | .sizeInBytes] | add // 0' <<<"$caches")
+          used_by_own_scope=$(jq --arg ref "$OWN_REF" \
+            '[.[] | select(.ref == $ref) | .sizeInBytes] | add // 0' <<<"$caches")
           used_by_others=$(jq --arg ref "$OWN_REF" \
             '[.[] | select(.ref != $ref) | .sizeInBytes] | add // 0' <<<"$caches")
           budget=$((10 * gib - used_by_own_scope - used_by_others))
@@ -398,17 +443,24 @@ jobs:
       - name: Remove the older entries in this scope
         env:
           GH_TOKEN: ${{ github.token }}
-          KEY: cache-${{ runner.os }}-${{ needs.check.outputs.head }}
-          KEY_PREFIX: cache-${{ runner.os }}-
+          BUILD_KEY: cache-${{ runner.os }}-${{ needs.check.outputs.head }}
+          FETCHER_KEY: ${{ needs.check.outputs.fetcher }}
           OWN_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          entries=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref "$OWN_REF" --key "$KEY_PREFIX" --limit 100 --json id,key)
-          if ! jq -e --arg k "$KEY" 'any(.[]; .key == $k)' <<<"$entries" > /dev/null; then
-            echo "::warning::No entry with key $KEY exists; keeping the older entries."
-            exit 0
-          fi
-          for id in $(jq -r --arg k "$KEY" '.[] | select(.key != $k) | .id' <<<"$entries"); do
-            gh cache delete "$id" --repo "$GITHUB_REPOSITORY"
-            echo "Deleted cache entry $id."
-          done
+          # Build cache entries are keyed under cache-, fetcher cache
+          # entries under fetcher-; each kind keeps its newest entry.
+          prune() {
+            local prefix=$1 key=$2 entries id
+            entries=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref "$OWN_REF" --key "$prefix" --limit 100 --json id,key)
+            if ! jq -e --arg k "$key" 'any(.[]; .key == $k)' <<<"$entries" > /dev/null; then
+              echo "::warning::No entry with key $key exists; keeping the older entries under $prefix."
+              return 0
+            fi
+            for id in $(jq -r --arg k "$key" '.[] | select(.key != $k) | .id' <<<"$entries"); do
+              gh cache delete "$id" --repo "$GITHUB_REPOSITORY"
+              echo "Deleted cache entry $id."
+            done
+          }
+          prune "cache-$RUNNER_OS-" "$BUILD_KEY"
+          prune "fetcher-$RUNNER_OS-" "$FETCHER_KEY"

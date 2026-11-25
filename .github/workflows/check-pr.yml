@@ -18,6 +18,11 @@
 # never touches another scope's and does not purge its own; entries in
 # a request's scope go when the request closes (cache-cleanup.yml) or
 # when GitHub expires them.
+#
+# The fetcher cache entry works as in check.yml. This run restores the
+# entry for its lock files from the request's scope, else from the scope
+# of main, else the newest entry of the month; it saves an entry under
+# the request's scope only when no entry for its lock files exists.
 
 name: check-pr
 
@@ -45,6 +50,13 @@ jobs:
       CI_CACHE: /home/runner/ci-cache
       # Caches whose paths are left out of the entry, space-separated.
       UPSTREAM_CACHES: https://cache.nixos.org
+      # The Nix fetcher cache, carried in a second Actions cache entry:
+      # the git repositories that inputs are unpacked or cloned into,
+      # and the table that maps each locked input to its tree there.
+      FETCHER_CACHE: |
+        ~/.cache/nix/tarball-cache-v*
+        ~/.cache/nix/gitv*
+        ~/.cache/nix/fetcher-cache-v*.sqlite*
     steps:
       - name: Decide whether this run builds
         id: guard
@@ -75,6 +87,26 @@ jobs:
           path: ${{ env.CI_CACHE }}
           key: cache-${{ runner.os }}-${{ github.event.pull_request.head.sha }}
           restore-keys: cache-${{ runner.os }}-
+
+      # The fetcher cache entry is named by the month and the hash of
+      # every lock file in the tree; the header says why.
+      - name: Name the fetcher cache entry
+        id: fetcher
+        if: steps.guard.outputs.build == 'true'
+        env:
+          LOCKS: ${{ hashFiles('**/flake.lock') }}
+        run: |
+          month=$(date -u +%Y-%m)
+          echo "prefix=fetcher-$RUNNER_OS-$month-" >> "$GITHUB_OUTPUT"
+          echo "key=fetcher-$RUNNER_OS-$month-$LOCKS" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: fetcher-restore
+        if: steps.guard.outputs.build == 'true'
+        with:
+          path: ${{ env.FETCHER_CACHE }}
+          key: ${{ steps.fetcher.outputs.key }}
+          restore-keys: ${{ steps.fetcher.outputs.prefix }}
 
       # A binary cache needs its directories and its info file before
       # anything opens it; created here, owned by this user, so that
@@ -112,6 +144,14 @@ jobs:
         if: steps.guard.outputs.build == 'true'
         run: nix flake check --print-build-logs
 
+      # Saved before the root step, so that its budget counts this
+      # entry. A run that restored this very key has nothing to add.
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: steps.guard.outputs.build == 'true' && steps.fetcher-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.FETCHER_CACHE }}
+          key: ${{ steps.fetcher.outputs.key }}
+
       - name: Root this build and apply the cache priorities
         if: steps.guard.outputs.build == 'true'
         env:
@@ -120,7 +160,6 @@ jobs:
           ROOT_ID: ${{ format('{0}/{1}', github.event.pull_request.number, github.event.pull_request.head.sha) }}
           CURRENT_MAIN: ${{ github.event.pull_request.base.sha }}
           OWN_REF: ${{ github.ref }}
-          KEY_PREFIX: cache-${{ runner.os }}-
           MAY_DELETE: "false"
         run: |
           set -euo pipefail
@@ -197,8 +236,8 @@ jobs:
           # 4. The budget, as in check.yml.
           gib=$((1024 * 1024 * 1024))
           caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --limit 1000 --json key,ref,sizeInBytes)
-          used_by_own_scope=$(jq --arg ref "$OWN_REF" --arg p "$KEY_PREFIX" \
-            '[.[] | select(.ref == $ref and (.key | startswith($p))) | .sizeInBytes] | add // 0' <<<"$caches")
+          used_by_own_scope=$(jq --arg ref "$OWN_REF" \
+            '[.[] | select(.ref == $ref) | .sizeInBytes] | add // 0' <<<"$caches")
           used_by_others=$(jq --arg ref "$OWN_REF" \
             '[.[] | select(.ref != $ref) | .sizeInBytes] | add // 0' <<<"$caches")
           budget=$((10 * gib - used_by_own_scope - used_by_others))
